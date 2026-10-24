@@ -1,0 +1,1265 @@
+diff --git a/dist/app/service-worker.js b/dist/app/service-worker.js
+index debdc6dde28bc12a15c60df7534908415bfe0093..cb66f7c8e9e0038c882a6c35eff009efa7767d97 100644
+--- a/dist/app/service-worker.js
++++ b/dist/app/service-worker.js
+@@ -1 +1,245 @@
+-var n=()=>"\nconst DB_NAME = 'studio-v1-media'\nconst STORE_NAME = 'drafts'\n\nconst DraftStatus = {\n  Deleted: 'deleted',\n  Created: 'created',\n  Updated: 'updated',\n  Pristine: 'pristine'\n}\n\nconst MEDIA_EXTENSIONS = [\n  'png',\n  'jpg',\n  'jpeg',\n  'svg',\n  'webp',\n  'avif',\n  'ico',\n  'gif',\n  'mp4',\n  'mov',\n  'avi',\n  'mkv',\n  'webm',\n  'ogg',\n  'mp3',\n  'wav',\n  'aac',\n  'm4a',\n  'm4v',\n  'm4b',\n]\n\nfunction extractImagePath(url) {\n  const pathname = url.pathname;\n  if (pathname.startsWith('/__nuxt_studio/ipx/')) {\n    // Strip prefix + IPX modifiers segment: /__nuxt_studio/ipx/{modifiers}/{path} → /{path}\n    const withoutPrefix = pathname.slice('/__nuxt_studio/ipx/'.length)\n    const slashIndex = withoutPrefix.indexOf('/')\n    return slashIndex !== -1 ? withoutPrefix.slice(slashIndex) : null\n  }\n\n  if (pathname.startsWith('/_ipx/_/')) {\n    return pathname.replace('/_ipx/_', '')\n  }\n\n  if (pathname.startsWith('/_vercel/image')) {\n    return url.searchParams.get('url') || null\n  }\n\n  if (MEDIA_EXTENSIONS.includes(pathname.split('.').pop())) {\n    return pathname\n  }\n\n  return null\n}\n\nself.addEventListener('install', event => {\n  self.skipWaiting()\n})\n\nself.addEventListener('activate', event => {\n  event.waitUntil(self.clients.claim())\n})\n\nself.addEventListener('fetch', event => {\n  const url = new URL(event.request.url);\n  const isSameDomain = url.origin === self.location.origin;\n\n  if (!isSameDomain) {\n    return\n  }\n\n  const imageUrl = extractImagePath(url);\n  if (imageUrl) {\n    return event.respondWith(fetchFromIndexedDB(event, imageUrl));\n  }\n})\n\nfunction fetchFromIndexedDB(event, url) {\n  const dbKey = url.replace(/^\\//g, '').replace(/\\//g, ':')\n  return getData(dbKey).then(data => {\n    if (!data) {\n      return fetch(event.request);\n    }\n\n    const dbItem = JSON.parse(data)\n\n    console.log('Data found in IndexedDB:', dbItem);\n\n    // Deleted file\n    if (dbItem.status === DraftStatus.Deleted) {\n      return fetch('https://placehold.co/1200x800?text=Deleted');\n    }\n\n    // Renamed file\n    if (dbItem.original?.path) {\n      return fetch(dbItem.original.path);\n    }\n\n    // Created file\n    const parsed = parseDataUrl(dbItem.modified.raw);\n    const bytes = base64ToUint8Array(parsed.base64);\n\n    return new Response(bytes, {\n      headers: { 'Content-Type': parsed.mime }\n    });\n  }).catch(() => fetch(event.request))\n}\n\nfunction parseDataUrl(dataUrl) {\n  // Example: data:image/png;base64,iVBORw0KG...\n  const match = dataUrl.match(/^data:(.+);base64,(.+)$/);\n  if (!match) return null;\n  return {\n    mime: match[1],\n    base64: match[2]\n  };\n}\n\nfunction base64ToUint8Array(base64) {\n  const binary = atob(base64);\n  const len = binary.length;\n  const bytes = new Uint8Array(len);\n  for (let i = 0; i < len; i++) {\n    bytes[i] = binary.charCodeAt(i);\n  }\n  return bytes;\n}\n\n// IndexedDB\nfunction openDB() {\n  return new Promise((resolve, reject) => {\n    const request = indexedDB.open(DB_NAME, 1);\n    request.onupgradeneeded = event => {\n      const db = event.target.result;\n      db.createObjectStore(STORE_NAME);\n    };\n    request.onsuccess = event => resolve(event.target.result);\n    request.onerror = event => reject(event.target.error);\n  });\n}\n\n// Read data from the object store\nfunction getData(key) {\n  return openDB().then(db => {\n    return new Promise((resolve, reject) => {\n      const tx = db.transaction('drafts', 'readonly');\n      const store = tx.objectStore('drafts');\n      const request = store.get(key);\n      request.onsuccess = () => resolve(request.result);\n      request.onerror = () => reject(request.error);\n    });\n  });\n}\n";export{n as serviceWorker};
+\ No newline at end of file
++/** Returns the embedded Studio media-preview service worker. */
++export function serviceWorker() {
++  return String.raw`
++const DB_NAME = 'studio-v1-media'
++const STORE_NAME = 'drafts'
++
++const DraftStatus = {
++  Deleted: 'deleted',
++  Created: 'created',
++  Updated: 'updated',
++  Pristine: 'pristine'
++}
++
++const MEDIA_EXTENSIONS = [
++  'png',
++  'jpg',
++  'jpeg',
++  'svg',
++  'webp',
++  'avif',
++  'ico',
++  'gif',
++  'mp4',
++  'mov',
++  'avi',
++  'mkv',
++  'webm',
++  'ogg',
++  'mp3',
++  'wav',
++  'aac',
++  'm4a',
++  'm4v',
++  'm4b',
++]
++
++function extractImagePath(url) {
++  const pathname = url.pathname;
++  if (pathname.startsWith('/__nuxt_studio/ipx/')) {
++    // Strip prefix + IPX modifiers segment: /__nuxt_studio/ipx/{modifiers}/{path} -> /{path}
++    const withoutPrefix = pathname.slice('/__nuxt_studio/ipx/'.length)
++    const slashIndex = withoutPrefix.indexOf('/')
++    return slashIndex !== -1 ? withoutPrefix.slice(slashIndex) : null
++  }
++
++  if (pathname.startsWith('/_ipx/_/')) {
++    return pathname.replace('/_ipx/_', '')
++  }
++
++  if (pathname.startsWith('/_vercel/image')) {
++    return url.searchParams.get('url') || null
++  }
++
++  if (MEDIA_EXTENSIONS.includes(pathname.split('.').pop())) {
++    return pathname
++  }
++
++  return null
++}
++
++self.addEventListener('install', event => {
++  self.skipWaiting()
++})
++
++self.addEventListener('activate', event => {
++  event.waitUntil(self.clients.claim())
++})
++
++self.addEventListener('fetch', event => {
++  const url = new URL(event.request.url);
++  const isSameDomain = url.origin === self.location.origin;
++
++  if (!isSameDomain) {
++    return
++  }
++
++  const imageUrl = extractImagePath(url);
++  if (imageUrl) {
++    return event.respondWith(fetchFromIndexedDB(event, imageUrl));
++  }
++})
++
++function fetchFromIndexedDB(event, url) {
++  const dbKey = url.replace(/^\//g, '').replace(/\//g, ':')
++  return getData(dbKey).then(data => {
++    if (!data) {
++      return fetch(event.request);
++    }
++
++    const dbItem = JSON.parse(data)
++
++    console.log('Data found in IndexedDB:', dbItem);
++
++    // Deleted file
++    if (dbItem.status === DraftStatus.Deleted) {
++      return fetch('https://placehold.co/1200x800?text=Deleted');
++    }
++
++    // Renamed file
++    if (dbItem.original?.path) {
++      return fetch(dbItem.original.path);
++    }
++
++    // Created file
++    const parsed = parseDataUrl(dbItem.modified.raw);
++    const bytes = base64ToUint8Array(parsed.base64);
++
++    return new Response(bytes, {
++      headers: { 'Content-Type': parsed.mime }
++    });
++  }).catch(() => fetch(event.request))
++}
++
++function parseDataUrl(dataUrl) {
++  // Example: data:image/png;base64,iVBORw0KG...
++  const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
++  if (!match) return null;
++  return {
++    mime: match[1],
++    base64: match[2]
++  };
++}
++
++function base64ToUint8Array(base64) {
++  const binary = atob(base64);
++  const len = binary.length;
++  const bytes = new Uint8Array(len);
++  for (let i = 0; i < len; i++) {
++    bytes[i] = binary.charCodeAt(i);
++  }
++  return bytes;
++}
++
++// IndexedDB
++/** Opens one request and bounds both blocked upgrades and opens queued behind them. */
++function openDBRequest(version) {
++  return new Promise((resolve, reject) => {
++    let settled = false;
++    let openTimeout;
++    let wasBlocked = false;
++    let request;
++
++    function fail(error) {
++      if (settled) return;
++      settled = true;
++      if (openTimeout !== undefined) clearTimeout(openTimeout);
++      reject(error);
++    }
++
++    try {
++      request = version === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version);
++    } catch (error) {
++      fail(error);
++      return;
++    }
++
++    openTimeout = setTimeout(() => {
++      const error = new Error(wasBlocked
++        ? 'Studio media draft storage is blocked by another tab. Close other tabs for this site and reload Studio.'
++        : 'Studio media draft storage did not respond within five seconds. Close other tabs for this site and reload Studio.');
++      error.name = wasBlocked ? 'StudioDraftStorageBlockedError' : 'StudioDraftStorageTimeoutError';
++      fail(error);
++    }, 5000);
++
++    request.onupgradeneeded = () => {
++      // Timed-out opens can still progress when another connection closes.
++      // Abort a late upgrade instead of mutating the schema after rejection.
++      if (settled) {
++        request.transaction.abort();
++        return;
++      }
++      if (!request.result.objectStoreNames.contains(STORE_NAME)) request.result.createObjectStore(STORE_NAME);
++    };
++    request.onblocked = () => {
++      if (!settled) wasBlocked = true;
++    };
++    request.onerror = () => fail(request.error || new Error('Studio could not open its local media draft storage.'));
++    request.onsuccess = () => {
++      const connection = request.result;
++      if (settled) {
++        connection.close();
++        return;
++      }
++      settled = true;
++      if (openTimeout !== undefined) clearTimeout(openTimeout);
++      connection.onversionchange = () => connection.close();
++      resolve(connection);
++    };
++  });
++}
++
++/** Opens the latest schema and repairs a missing store without replacing existing draft data. */
++async function openDB() {
++  for (let attempt = 0; attempt < 3; attempt++) {
++    const connection = await openDBRequest();
++    if (connection.objectStoreNames.contains(STORE_NAME)) return connection;
++    const nextVersion = connection.version + 1;
++    connection.close();
++    try {
++      const upgraded = await openDBRequest(nextVersion);
++      if (upgraded.objectStoreNames.contains(STORE_NAME)) return upgraded;
++      upgraded.close();
++    } catch (error) {
++      // A different tab may have upgraded since the schema was inspected.
++      if (error?.name !== 'VersionError') throw error;
++    }
++  }
++  throw new Error('Studio could not prepare its local media draft storage after concurrent updates. Close other tabs for this site and reload Studio.');
++}
++
++/** Reads one draft and releases its connection on every completion or failure path. */
++function getData(key) {
++  return openDB().then(connection => new Promise((resolve, reject) => {
++    let settled = false;
++    let result;
++
++    function fail(error) {
++      if (settled) return;
++      settled = true;
++      connection.close();
++      reject(error);
++    }
++
++    try {
++      const transaction = connection.transaction(STORE_NAME, 'readonly');
++      const request = transaction.objectStore(STORE_NAME).get(key);
++      request.onsuccess = () => {
++        result = request.result;
++      };
++      request.onerror = () => fail(request.error || new Error('Studio could not read its local media draft.'));
++      transaction.onerror = () => fail(transaction.error || request.error || new Error('Studio media draft storage transaction failed.'));
++      transaction.onabort = () => fail(transaction.error || new Error('Studio media draft storage transaction was aborted.'));
++      transaction.oncomplete = () => {
++        if (settled) return;
++        settled = true;
++        connection.close();
++        resolve(result);
++      };
++    } catch (error) {
++      fail(error);
++    }
++  }));
++}
++`;
++}
+diff --git a/dist/module/module.mjs b/dist/module/module.mjs
+index 24472137638a3b6d9588933f4175cd90def175bd..be7e817bad8e06d07418b5edbffda85f1027faf8 100644
+--- a/dist/module/module.mjs
++++ b/dist/module/module.mjs
+@@ -6,6 +6,7 @@ import fsDriver from 'unstorage/drivers/fs';
+ import { createStorage } from 'unstorage';
+ import { mediaItemFieldsFromKey } from '../../../dist/module/runtime/utils/media.js';
+ import { readFile } from 'node:fs/promises';
++import { registerStudioAppAssets } from './runtime/utils/studio-app.mjs';
+ 
+ const version = "1.8.0";
+ 
+@@ -403,6 +404,28 @@ const module$1 = defineNuxtModule({
+         }
+       }
+     });
++    const distAppDir = [
++      resolver.resolve("../../dist/app"),
++      // compiled version
++      resolver.resolve("../../../dist/app")
++      // source version
++    ].find(existsSync);
++    if (!distAppDir) {
++      throw new Error("Nuxt Studio embedded app assets are missing.");
++    }
++    const studioAppAssets = await registerStudioAppAssets(nuxt, {
++      version,
++      appDirectory: distAppDir,
++      buildDirectory: nuxt.options.buildDir
++    });
++    nuxt.hook("nitro:config", (nitroConfig) => {
++      nitroConfig.publicAssets ||= [];
++      nitroConfig.publicAssets.push({
++        dir: studioAppAssets.directory,
++        baseURL: studioAppAssets.baseURL,
++        maxAge: 60 * 60 * 24 * 365
++      });
++    });
+     extendViteConfig((config) => {
+       config.define ||= {};
+       config.define["import.meta.preview"] = true;
+@@ -421,27 +444,11 @@ const module$1 = defineNuxtModule({
+         apply: "build",
+         resolveId(id) {
+           if (id === "nuxt-studio/app") {
+-            return { id: `/_studio-app/${version}/main.js`, external: true };
++            return { id: `${studioAppAssets.baseURL}/main.js`, external: true };
+           }
+         }
+       });
+     });
+-    const distAppDir = [
+-      resolver.resolve("../../dist/app"),
+-      // compiled version
+-      resolver.resolve("../../../dist/app")
+-      // source version
+-    ].find(existsSync);
+-    if (distAppDir) {
+-      nuxt.hook("nitro:config", (nitroConfig) => {
+-        nitroConfig.publicAssets ||= [];
+-        nitroConfig.publicAssets.push({
+-          dir: distAppDir,
+-          baseURL: `/_studio-app/${version}`,
+-          maxAge: 60 * 60 * 24 * 365
+-        });
+-      });
+-    }
+     addPlugin(process.env.STUDIO_DEV_SERVER ? runtime("./plugins/studio.client.dev") : runtime("./plugins/studio.client"));
+     addServerHandler({ middleware: true, handler: runtime("./server/middleware/studio-env") });
+     let publicAssetsStorage;
+diff --git a/dist/module/runtime/host.js b/dist/module/runtime/host.js
+index 4befa652031c22236cebae18f9d9259b98e760cd..2ead968bd4141001b4736aa9c605be94690dfc58 100644
+--- a/dist/module/runtime/host.js
++++ b/dist/module/runtime/host.js
+@@ -12,10 +12,92 @@ import { generateIdFromFsPath as generateMediaIdFromFsPath, mediaItemFieldsFromK
+ import { VIRTUAL_MEDIA_COLLECTION_NAME } from "./utils/constants.js";
+ import { getCollectionSourceById } from "./utils/source.js";
+ import { kebabCase } from "scule";
+-const serviceWorkerVersion = "v0.0.5";
++const serviceWorkerVersion = "v0.0.6";
+ function getLocalColorMode() {
+   return document.documentElement.classList.contains("dark") ? "dark" : "light";
+ }
++/**
++ * Wait for the current preview worker before any draft database is opened.
++ * @param {string} scriptPath
++ * @returns {Promise<void>}
++ */
++async function registerStudioServiceWorker(scriptPath) {
++  if (!("serviceWorker" in navigator)) {
++    return;
++  }
++  const serviceWorkers = navigator.serviceWorker;
++  const scriptURL = new URL(scriptPath, window.location.href).href;
++  await new Promise((resolve, reject) => {
++    /** @type {ServiceWorkerRegistration | undefined} */
++    let registration;
++    /** @type {ServiceWorker | undefined} */
++    let worker;
++    let settled = false;
++    const timeout = setTimeout(() => {
++      finish("Studio's updated preview worker did not become ready. Close other tabs for this website, then reload Studio.");
++    }, 20_000);
++    /** @param {string} [message] */
++    function finish(message) {
++      if (settled) {
++        return;
++      }
++      settled = true;
++      clearTimeout(timeout);
++      serviceWorkers.removeEventListener("controllerchange", checkReadiness);
++      registration?.removeEventListener("updatefound", checkReadiness);
++      worker?.removeEventListener("statechange", checkReadiness);
++      worker?.removeEventListener("error", workerFailed);
++      if (message) {
++        reject(new Error(message));
++      } else {
++        resolve();
++      }
++    }
++    /** Reject a failed update instead of falling back to an incompatible active worker. */
++    function workerFailed() {
++      finish("Studio could not activate its updated preview worker. Close other tabs for this website, then reload Studio.");
++    }
++    /** Follow the newest worker through installation, activation and client takeover. */
++    function checkReadiness() {
++      if (settled || !registration) {
++        return;
++      }
++      if (worker?.state === "redundant") {
++        workerFailed();
++        return;
++      }
++      // An update must finish even when an older active worker uses the same URL.
++      const candidate = registration.installing || registration.waiting || registration.active;
++      if (!candidate || candidate.scriptURL !== scriptURL) {
++        return;
++      }
++      if (worker !== candidate) {
++        worker?.removeEventListener("statechange", checkReadiness);
++        worker?.removeEventListener("error", workerFailed);
++        worker = candidate;
++        worker.addEventListener("statechange", checkReadiness);
++        worker.addEventListener("error", workerFailed);
++      }
++      if (worker.state === "redundant") {
++        workerFailed();
++      } else if (worker.state === "activated" && registration.active === worker && (!serviceWorkers.controller || serviceWorkers.controller === worker)) {
++        // A force-refresh legitimately has no controller; the new active worker is still ready.
++        finish();
++      }
++    }
++    serviceWorkers.addEventListener("controllerchange", checkReadiness);
++    Promise.resolve().then(() => serviceWorkers.register(scriptPath, { updateViaCache: "none" })).then((result) => {
++      if (settled) {
++        return;
++      }
++      registration = result;
++      registration.addEventListener("updatefound", checkReadiness);
++      checkReadiness();
++    }).catch(() => {
++      finish("Studio could not register its updated preview worker. Check your connection, then reload Studio.");
++    });
++  });
++}
+ export function useStudioHost(user, repository) {
+   let localDatabaseAdapter = null;
+   let colorMode = getLocalColorMode();
+@@ -304,10 +386,8 @@ export function useStudioHost(user, repository) {
+         useRouter().push(path);
+       },
+       getCurrentRoute: () => useRouter().currentRoute.value,
+-      registerServiceWorker: () => {
+-        if ("serviceWorker" in navigator) {
+-          navigator.serviceWorker.register(`/sw.js?${serviceWorkerVersion}`);
+-        }
++      registerServiceWorker: async () => {
++        await registerStudioServiceWorker(`/sw.js?${serviceWorkerVersion}`);
+       },
+       unregisterServiceWorker: () => {
+         if ("serviceWorker" in navigator) {
+diff --git a/dist/module/runtime/server/routes/admin.js b/dist/module/runtime/server/routes/admin.js
+index 252c1ec0396f64fb303b62838a3362ef00042672..83caafbde852c59e08a8346fa33a7618e5e57735 100644
+--- a/dist/module/runtime/server/routes/admin.js
++++ b/dist/module/runtime/server/routes/admin.js
+@@ -1,6 +1,7 @@
+-import { eventHandler, getQuery, setCookie, sendRedirect, getRequestProtocol } from "h3";
+-import { createError, useRuntimeConfig } from "#imports";
++import { eventHandler, getQuery, setCookie, sendRedirect, getRequestProtocol, setResponseHeader, setResponseStatus } from "h3";
++import { useRuntimeConfig } from "#imports";
+ export default eventHandler((event) => {
++  setResponseHeader(event, "Cache-Control", "no-store");
+   const { redirect } = getQuery(event);
+   if (redirect) {
+     setCookie(event, "studio-redirect", String(redirect), {
+@@ -18,10 +19,9 @@ export default eventHandler((event) => {
+   const hasSSO = auth?.sso?.serverUrl && auth?.sso?.clientId && auth?.sso?.clientSecret && "sso";
+   const providers = [hasGithub, hasGitlab, hasGoogle, hasSSO].filter(Boolean);
+   if (providers.length === 0) {
+-    throw createError({
+-      statusCode: 404,
+-      message: "No authentication provider found"
+-    });
++    setResponseStatus(event, 503);
++    setResponseHeader(event, "Content-Type", "text/html; charset=utf-8");
++    return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Nuxt Studio unavailable</title></head><body><main><h1>Nuxt Studio unavailable</h1><p>Authentication is not configured. Please contact the website administrator to restore Studio access.</p></main></body></html>';
+   }
+   if (providers.length === 1) {
+     return sendRedirect(event, `/__nuxt_studio/auth/${providers[0]}`);
+diff --git a/dist/module/runtime/server/routes/auth/github.get.js b/dist/module/runtime/server/routes/auth/github.get.js
+index 1d1104c4d8cf3f6c0611bfd39ca284c63287815f..f2e9569f28b0ebfce09a2abb2c319851b5f056fd 100644
+--- a/dist/module/runtime/server/routes/auth/github.get.js
++++ b/dist/module/runtime/server/routes/auth/github.get.js
+@@ -1,10 +1,10 @@
+ import { useRuntimeConfig } from "#imports";
+-import { createError, deleteCookie, eventHandler, getCookie, getQuery, getRequestURL, sendRedirect } from "h3";
++import { createError, deleteCookie, getCookie, getQuery, getRequestURL, sendRedirect } from "h3";
+ import { withQuery, withoutTrailingSlash } from "ufo";
+-import { generateOAuthState, requestAccessToken, validateOAuthState } from "../../utils/auth.js";
++import { defineStudioAuthHandler, generateOAuthState, requestAccessToken, validateOAuthState } from "../../utils/auth.js";
+ import { setInternalStudioUserSession } from "../../utils/session.js";
+ import { mergeConfig } from "../../utils/object.js";
+-export default eventHandler(async (event) => {
++export default defineStudioAuthHandler(async (event) => {
+   const studioConfig = useRuntimeConfig(event).studio;
+   const instanceUrl = withoutTrailingSlash(studioConfig?.auth?.github?.instanceUrl || studioConfig?.repository?.instanceUrl || "https://github.com");
+   const isEnterprise = new URL(instanceUrl).hostname !== "github.com";
+@@ -20,15 +20,13 @@ export default eventHandler(async (event) => {
+   if (query.error) {
+     throw createError({
+       statusCode: 401,
+-      message: `GitHub login failed: ${query.error || "Unknown error"}`,
+-      data: query
++      message: `GitHub login failed: ${query.error || "Unknown error"}`
+     });
+   }
+   if (!config.clientId || !config.clientSecret) {
+     throw createError({
+       statusCode: 500,
+-      message: "Missing GitHub client ID or secret",
+-      data: config
++      message: "Missing GitHub client ID or secret"
+     });
+   }
+   const requestURL = getRequestURL(event);
+@@ -72,8 +70,7 @@ export default eventHandler(async (event) => {
+   if (token.error || !token.access_token) {
+     throw createError({
+       statusCode: 500,
+-      message: "Failed to get access token",
+-      data: token
++      message: "Failed to get access token"
+     });
+   }
+   const accessToken = token.access_token;
+@@ -94,8 +91,7 @@ export default eventHandler(async (event) => {
+     if (!primaryEmail) {
+       throw createError({
+         statusCode: 500,
+-        message: "Could not get GitHub user email",
+-        data: token
++        message: "Could not get GitHub user email"
+       });
+     }
+     user.email = primaryEmail.email;
+diff --git a/dist/module/runtime/server/routes/auth/gitlab.get.js b/dist/module/runtime/server/routes/auth/gitlab.get.js
+index 5d5ad544335ff2d2b62e50f4dcdf97267da05fb5..f03ad17418984584092edf0900e96bb59a1b13b6 100644
+--- a/dist/module/runtime/server/routes/auth/gitlab.get.js
++++ b/dist/module/runtime/server/routes/auth/gitlab.get.js
+@@ -1,11 +1,11 @@
+ import { useRuntimeConfig } from "#imports";
+-import { createError, deleteCookie, eventHandler, getCookie, getQuery, getRequestURL, sendRedirect } from "h3";
++import { createError, deleteCookie, getCookie, getQuery, getRequestURL, sendRedirect } from "h3";
+ import { FetchError } from "ofetch";
+ import { withQuery, withoutTrailingSlash } from "ufo";
+-import { generateOAuthState, validateOAuthState } from "../../utils/auth.js";
++import { defineStudioAuthHandler, generateOAuthState, validateOAuthState } from "../../utils/auth.js";
+ import { setInternalStudioUserSession } from "../../utils/session.js";
+ import { mergeConfig } from "../../utils/object.js";
+-export default eventHandler(async (event) => {
++export default defineStudioAuthHandler(async (event) => {
+   const studioConfig = useRuntimeConfig(event).studio;
+   const instanceUrl = withoutTrailingSlash(studioConfig?.auth?.gitlab?.instanceUrl || studioConfig?.repository?.instanceUrl || "https://gitlab.com");
+   const config = mergeConfig(studioConfig?.auth?.gitlab, {
+@@ -20,15 +20,13 @@ export default eventHandler(async (event) => {
+   if (query.error) {
+     throw createError({
+       statusCode: 401,
+-      message: `GitLab login failed: ${query.error || "Unknown error"}`,
+-      data: query
++      message: `GitLab login failed: ${query.error || "Unknown error"}`
+     });
+   }
+   if (!config.applicationId || !config.applicationSecret) {
+     throw createError({
+       statusCode: 500,
+-      message: "Missing GitLab application ID or secret",
+-      data: config
++      message: "Missing GitLab application ID or secret"
+     });
+   }
+   const requestURL = getRequestURL(event);
+@@ -70,8 +68,7 @@ export default eventHandler(async (event) => {
+   if (token.error || !token.access_token) {
+     throw createError({
+       statusCode: 500,
+-      message: "Failed to get access token",
+-      data: token
++      message: "Failed to get access token"
+     });
+   }
+   const accessToken = token.access_token;
+@@ -83,8 +80,7 @@ export default eventHandler(async (event) => {
+   if (!user.email && config.emailRequired) {
+     throw createError({
+       statusCode: 500,
+-      message: "Could not get GitLab user email",
+-      data: token
++      message: "Could not get GitLab user email"
+     });
+   }
+   const moderators = studioConfig?.auth?.gitlab?.moderators?.split(",").filter(Boolean) || [];
+diff --git a/dist/module/runtime/server/routes/auth/google.get.js b/dist/module/runtime/server/routes/auth/google.get.js
+index 453a211d36e77c7050120a5a314e5a8fe143d527..1f796aff3d2330ee6b8ebfaab8173e122a658638 100644
+--- a/dist/module/runtime/server/routes/auth/google.get.js
++++ b/dist/module/runtime/server/routes/auth/google.get.js
+@@ -1,12 +1,12 @@
+ import { useRuntimeConfig } from "#imports";
+ import { consola } from "consola";
+-import { createError, deleteCookie, eventHandler, getCookie, getQuery, getRequestURL, sendRedirect } from "h3";
++import { createError, deleteCookie, getCookie, getQuery, getRequestURL, sendRedirect } from "h3";
+ import { withQuery } from "ufo";
+-import { generateOAuthState, requestAccessToken, validateOAuthState } from "../../utils/auth.js";
++import { defineStudioAuthHandler, generateOAuthState, requestAccessToken, validateOAuthState } from "../../utils/auth.js";
+ import { setInternalStudioUserSession } from "../../utils/session.js";
+ import { mergeConfig } from "../../utils/object.js";
+ const logger = consola.withTag("Nuxt Studio");
+-export default eventHandler(async (event) => {
++export default defineStudioAuthHandler(async (event) => {
+   const studioConfig = useRuntimeConfig(event).studio;
+   const config = mergeConfig(studioConfig?.auth?.google, {
+     authorizationURL: "https://accounts.google.com/o/oauth2/v2/auth",
+@@ -19,15 +19,13 @@ export default eventHandler(async (event) => {
+   if (query.error) {
+     throw createError({
+       statusCode: 401,
+-      message: `Google login failed: ${query.error || "Unknown error"}`,
+-      data: query
++      message: `Google login failed: ${query.error || "Unknown error"}`
+     });
+   }
+   if (!config.clientId || !config.clientSecret) {
+     throw createError({
+       statusCode: 500,
+-      message: "Missing Google client ID or secret",
+-      data: config
++      message: "Missing Google client ID or secret"
+     });
+   }
+   const requestURL = getRequestURL(event);
+@@ -74,8 +72,7 @@ export default eventHandler(async (event) => {
+   if (token.error || !token.access_token) {
+     throw createError({
+       statusCode: 500,
+-      message: "Failed to get access token",
+-      data: token
++      message: "Failed to get access token"
+     });
+   }
+   const accessToken = token.access_token;
+@@ -90,8 +87,7 @@ export default eventHandler(async (event) => {
+   if (!user.email && config.emailRequired) {
+     throw createError({
+       statusCode: 500,
+-      message: "Could not get Google user email",
+-      data: user
++      message: "Could not get Google user email"
+     });
+   }
+   const moderators = studioConfig?.auth?.google?.moderators?.split(",").filter(Boolean) || [];
+diff --git a/dist/module/runtime/server/routes/auth/sso.get.js b/dist/module/runtime/server/routes/auth/sso.get.js
+index c972e9399eb9c7aec8c0127acb12f6e27b8913e5..d8533ce1b424597154127ddb68d527797fdc2e77 100644
+--- a/dist/module/runtime/server/routes/auth/sso.get.js
++++ b/dist/module/runtime/server/routes/auth/sso.get.js
+@@ -1,25 +1,23 @@
+ import { useRuntimeConfig } from "#imports";
+-import { createError, deleteCookie, eventHandler, getCookie, getQuery, getRequestURL, sendRedirect } from "h3";
++import { createError, deleteCookie, getCookie, getQuery, getRequestURL, sendRedirect } from "h3";
+ import { withQuery } from "ufo";
+-import { consumePKCECodeVerifier, generateCodeChallenge, generateOAuthState, generatePKCECodeVerifier, requestAccessToken, validateOAuthState } from "../../utils/auth.js";
++import { defineStudioAuthHandler, consumePKCECodeVerifier, generateCodeChallenge, generateOAuthState, generatePKCECodeVerifier, requestAccessToken, validateOAuthState } from "../../utils/auth.js";
+ import { setInternalStudioUserSession } from "../../utils/session.js";
+ import { mergeConfig } from "../../utils/object.js";
+-export default eventHandler(async (event) => {
++export default defineStudioAuthHandler(async (event) => {
+   const studioConfig = useRuntimeConfig(event).studio;
+   const config = mergeConfig(studioConfig?.auth?.sso, {});
+   const query = getQuery(event);
+   if (query.error) {
+     throw createError({
+       statusCode: 401,
+-      message: `SSO login failed: ${query.error_description || query.error || "Unknown error"}`,
+-      data: query
++      message: `SSO login failed: ${query.error_description || query.error || "Unknown error"}`
+     });
+   }
+   if (!config.serverUrl || !config.clientId || !config.clientSecret) {
+     throw createError({
+       statusCode: 500,
+-      message: "Missing SSO server URL, client ID, or client secret. Set NUXT_STUDIO_AUTH_SSO_SERVER_URL, NUXT_STUDIO_AUTH_SSO_CLIENT_ID, and NUXT_STUDIO_AUTH_SSO_CLIENT_SECRET.",
+-      data: config
++      message: "Missing SSO server URL, client ID, or client secret. Set NUXT_STUDIO_AUTH_SSO_SERVER_URL, NUXT_STUDIO_AUTH_SSO_CLIENT_ID, and NUXT_STUDIO_AUTH_SSO_CLIENT_SECRET."
+     });
+   }
+   const serverUrl = config.serverUrl.replace(/\/$/, "");
+@@ -60,8 +58,7 @@ export default eventHandler(async (event) => {
+   if (token.error || !token.access_token) {
+     throw createError({
+       statusCode: 500,
+-      message: `Failed to get access token: ${token.error_description || token.error || "Unknown error"}`,
+-      data: token
++      message: `Failed to get access token: ${token.error_description || token.error || "Unknown error"}`
+     });
+   }
+   const user = await $fetch(
+@@ -75,8 +72,7 @@ export default eventHandler(async (event) => {
+   if (!user.email) {
+     throw createError({
+       statusCode: 500,
+-      message: "Could not get user email from SSO server",
+-      data: user
++      message: "Could not get user email from SSO server"
+     });
+   }
+   let repositoryToken;
+diff --git a/dist/module/runtime/server/utils/auth.d.ts b/dist/module/runtime/server/utils/auth.d.ts
+index 066a9650dfa20b5e6be51c1e99597ece52a85619..40d9562a3a17bc6dce921803e046c71048698f7a 100644
+--- a/dist/module/runtime/server/utils/auth.d.ts
++++ b/dist/module/runtime/server/utils/auth.d.ts
+@@ -1,4 +1,6 @@
+-import { type H3Event } from 'h3';
++import { type EventHandler, type H3Event } from 'h3';
++/** Return public OAuth errors without reflecting credentials, tokens or provider payloads. */
++export declare function defineStudioAuthHandler(handler: EventHandler): EventHandler;
+ export declare function requireStudioAuth(event: H3Event): Promise<void>;
+ export interface RequestAccessTokenResponse {
+     access_token?: string;
+diff --git a/dist/module/runtime/server/utils/auth.js b/dist/module/runtime/server/utils/auth.js
+index 557b4328cc3ca5bf038a24941b4fec0614367501..7740eef67dd6dc5e720471b60113d4ec0a97c355 100644
+--- a/dist/module/runtime/server/utils/auth.js
++++ b/dist/module/runtime/server/utils/auth.js
+@@ -1,7 +1,22 @@
+ import { getRandomValues } from "uncrypto";
+-import { getCookie, deleteCookie, setCookie, useSession, getRequestProtocol, createError } from "h3";
++import { getCookie, deleteCookie, setCookie, useSession, getRequestProtocol, createError, eventHandler, isError, setResponseHeader, setResponseStatus } from "h3";
+ import { FetchError } from "ofetch";
+ import { useRuntimeConfig } from "#imports";
++/** Return public OAuth errors without reflecting credentials, tokens or provider payloads. */
++export function defineStudioAuthHandler(handler) {
++  return eventHandler(async (event) => {
++    setResponseHeader(event, "Cache-Control", "no-store");
++    try {
++      return await handler(event);
++    } catch (error) {
++      const statusCode = isError(error) && error.statusCode >= 400 && error.statusCode <= 599 ? error.statusCode : 500;
++      const message = statusCode === 400 ? "Sign-in could not be completed. Please try again." : statusCode === 401 ? "Sign-in was declined. Please try again." : statusCode === 403 ? "You are not authorized to access the studio" : "Nuxt Studio authentication is unavailable. Please contact the website administrator.";
++      setResponseStatus(event, statusCode);
++      setResponseHeader(event, "Content-Type", "application/json; charset=utf-8");
++      return { statusCode, message };
++    }
++  });
++}
+ export async function requireStudioAuth(event) {
+   if (import.meta.dev) {
+     return;
+diff --git a/dist/module/runtime/utils/document/compare.js b/dist/module/runtime/utils/document/compare.js
+index 664faba51f41afe2651de719deff1305f0b600bb..6a49213b1bfae152b2c905bd3bbc57821de06bf4 100644
+--- a/dist/module/runtime/utils/document/compare.js
++++ b/dist/module/runtime/utils/document/compare.js
+@@ -1,9 +1,11 @@
+ import { ContentFileExtension } from "../../types/content.js";
+ import { doObjectsMatch } from "../object.js";
+ import { renderMarkdown } from "comark/render";
++import { compressTree } from "@nuxt/content/runtime";
+ import { documentFromContent } from "./generate.js";
+ import { cleanDataKeys } from "./schema.js";
+-import { comarkTreeFromLegacyDocument, normalizeLegacyBodyDifferences } from "./legacy.js";
++import { comarkTreeFromLegacyDocument } from "./legacy.js";
++import { sanitizeDocumentTree } from "./tree.js";
+ const EMPTY_TREE = { nodes: [], frontmatter: {}, meta: {} };
+ function comarkBody(document) {
+   return comarkTreeFromLegacyDocument(document) ?? EMPTY_TREE;
+@@ -22,10 +24,15 @@ function normalizeNode(node) {
+ export async function isDocumentMatchingContent(content, document) {
+   const generatedDocument = await documentFromContent(document.id, content, { compress: true, preserveLinkAttributes: true });
+   if (generatedDocument.extension === ContentFileExtension.Markdown) {
+-    const generatedNormalized = normalizeAttrsDeep(normalizeLegacyBodyDifferences({ ...generatedDocument.body, frontmatter: {} }));
+-    const documentNormalized = normalizeAttrsDeep(normalizeLegacyBodyDifferences({ ...comarkBody(document), frontmatter: {} }));
+-    const generatedBodyStringified = (await renderMarkdown(generatedNormalized)).replace(/\n/g, "");
+-    const documentBodyStringified = (await renderMarkdown(documentNormalized)).replace(/\n/g, "");
++    // Nuxt Content 3 stores MDC trees. Compare source through the same parser and
++    // host sanitization, rather than treating Comark conversion differences as edits.
++    const { parseMarkdown } = await import("@nuxtjs/mdc/runtime");
++    const parsedSource = await parseMarkdown(content, { highlight: false });
++    const sourceDocument = sanitizeDocumentTree({ ...generatedDocument, body: compressTree(parsedSource.body) });
++    const generatedNormalized = normalizeAttrsDeep({ ...comarkBody(sourceDocument), frontmatter: {} });
++    const documentNormalized = normalizeAttrsDeep({ ...comarkBody(document), frontmatter: {} });
++    const generatedBodyStringified = await renderMarkdown(generatedNormalized);
++    const documentBodyStringified = await renderMarkdown(documentNormalized);
+     if (generatedBodyStringified !== documentBodyStringified) {
+       return false;
+     }
+diff --git a/dist/module/runtime/utils/document/generate.js b/dist/module/runtime/utils/document/generate.js
+index 7aec7f49185105f323a34f714b4151702b3ec118..3cc5b5f4035b39d983473c9362f1e4a4653a4d41 100644
+--- a/dist/module/runtime/utils/document/generate.js
++++ b/dist/module/runtime/utils/document/generate.js
+@@ -123,7 +123,9 @@ export async function contentFromMarkdownDocument(document) {
+   if (!tree) return "\n";
+   const body = unbindComarkTree(tree);
+   const markdown = await renderMarkdown(body, {
+-    blockAttributesStyle: "frontmatter"
++    blockAttributesStyle: "frontmatter",
++    // Keep typed props and arbitrary class values out of lossy inline shorthand.
++    maxInlineAttributes: 0
+   });
+   return padBlankLinesInComponents(markdown) + "\n";
+ }
+diff --git a/dist/module/runtime/utils/document/schema.js b/dist/module/runtime/utils/document/schema.js
+index deb8f128a4bdab1cc2c5183cd28c7c2b4fb2c065..85e9900de735dea6bf9b93d7ea0e9fbec3e42d54 100644
+--- a/dist/module/runtime/utils/document/schema.js
++++ b/dist/module/runtime/utils/document/schema.js
+@@ -34,9 +34,6 @@ export function pickReservedKeysFromDocument(document) {
+ }
+ export function cleanDataKeys(document) {
+   const result = omit(document, reservedKeys);
+-  if (result.navigation === true || result.navigation === "true") {
+-    Reflect.deleteProperty(result, "navigation");
+-  }
+   if (document.seo) {
+     const seo = { ...document.seo };
+     if (!seo.title || seo.title === document.title) {
+@@ -62,6 +59,10 @@ export function cleanDataKeys(document) {
+       result[key] = document.meta[key];
+     }
+   }
++  // Hidden navigation values are retained in meta; deduplicate the default after merging them.
++  if (result.navigation === true || result.navigation === "true") {
++    Reflect.deleteProperty(result, "navigation");
++  }
+   for (const key in result || {}) {
+     if (result[key] === null) {
+       Reflect.deleteProperty(result, key);
+diff --git a/dist/module/runtime/utils/document/tree.js b/dist/module/runtime/utils/document/tree.js
+index 8df970e7388a0e0416d45ec3268b77c9201b6bca..a9df53f999f87148e97c6747dcacb375a17666a7 100644
+--- a/dist/module/runtime/utils/document/tree.js
++++ b/dist/module/runtime/utils/document/tree.js
+@@ -34,6 +34,10 @@ export function sanitizeDocumentTree(document, collection) {
+     const properties = collection?.schema?.definitions?.[collection.name]?.properties;
+     const hiddenKeys = Object.keys(properties || {}).filter((key) => properties?.[key]?.$content?.editor?.hidden);
+     for (const key of hiddenKeys) {
++      // Hidden authorial fields (for example a route slug) still belong in the published file.
++      if (Object.hasOwn(document, key)) {
++        document.meta = { ...document.meta || {}, [key]: document[key] };
++      }
+       Reflect.deleteProperty(document, key);
+     }
+   }
+diff --git a/dist/module/runtime/utils/studio-app-editing.mjs b/dist/module/runtime/utils/studio-app-editing.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..0de2d1714be8040f8fb2cfd08db49b6378a8fcb2
+--- /dev/null
++++ b/dist/module/runtime/utils/studio-app-editing.mjs
+@@ -0,0 +1,12 @@
++/** Register exact-file editing in production and restrict the Comark notice to Markdown. */
++
++const guardedEditRegistration = ',e.on.requestDocumentEdit(async e=>{a.currentFeature.value!==pN.Content&&await a.switchFeature(pN.Content),await t.selectItemByFsPath(e),o.open()})}(),await d.load()';
++const productionEditRegistration = '}(),t.on.requestDocumentEdit(async e=>{f.currentFeature.value!==pN.Content&&await f.switchFeature(pN.Content),await u.selectItemByFsPath(e),l.open()}),await d.load()';
++const untypedFormattingCheck = '(r.value=!1,i.value=!1,t.draftItem.status===cP.Pristine)&&(t.draftItem.original&&t.draftItem.remoteFile?.content)';
++const markdownFormattingCheck = '(r.value=!1,i.value=!1,t.draftItem.status===cP.Pristine&&t.draftItem.original?.extension===rP.Markdown)&&(t.draftItem.original&&t.draftItem.remoteFile?.content)';
++
++/** Exact replacements in the pinned Studio distribution, checked before any transformation. */
++export const editingReplacements = [
++  { before: guardedEditRegistration, after: productionEditRegistration },
++  { before: untypedFormattingCheck, after: markdownFormattingCheck },
++];
+diff --git a/dist/module/runtime/utils/studio-app-reconciliation.mjs b/dist/module/runtime/utils/studio-app-reconciliation.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..8d897c88ef5ebed3d7de502313dfef16f93da148
+--- /dev/null
++++ b/dist/module/runtime/utils/studio-app-reconciliation.mjs
+@@ -0,0 +1,81 @@
++/** Reconcile only restored drafts proven byte-identical to fresh GitHub source, preserving real edits. */
++
++const documentDraftStart = 'var JU=lN((e,t)=>{const{isLoading:n,list:a,current:o,get:r,create:i,remove:s,revert:l,revertAll:c,selectByFsPath:d,unselect:u,load:p,getStatus:m}=Pz("document",e,t,Tz),g=uz(),f=QU(e),v=e.document.db,b=e.document.generate.contentFromDocument;return{';
++const documentDraftEnd = 'load:p,selectByFsPath:d,unselect:u,getStatus:m}});function ZU(';
++const githubFetchOptions = 'return{fetchFile:async function(e,{cached:t=!1}={}){if(e=lF(r,e),t){const t=l[e]';
++const githubFileRequest = 'try{const n={...await m(`/contents/${e}?ref=${o}`),provider:"github"};return t&&(l[e]=n),n}';
++const documentDraftReconciliation = String.raw`
++function studioDocumentSnapshotMatches(left, right) {
++  if (Object.is(left, right)) return true;
++  if (!left || !right || typeof left !== "object" || typeof right !== "object" || Object.getPrototypeOf(left) !== Object.getPrototypeOf(right)) return false;
++  const keys = Reflect.ownKeys(left);
++  const otherKeys = Reflect.ownKeys(right);
++  return keys.length === otherKeys.length && keys.every(key => Object.hasOwn(right, key) && studioDocumentSnapshotMatches(left[key], right[key]));
++}
++let studioDocumentMutationVersion = 0;
++let studioDocumentMutationsPending = 0;
++let studioDocumentLoadVersion = 0;
++for (const method of ["create", "update", "applyFormatting", "remove", "revert", "revertAll", "rename", "duplicate"]) {
++  const originalMethod = studioDraftDocuments[method];
++  studioDraftDocuments[method] = async (...args) => {
++    studioDocumentMutationVersion++;
++    studioDocumentMutationsPending++;
++    try {
++      return await originalMethod(...args);
++    } finally {
++      studioDocumentMutationsPending--;
++    }
++  };
++}
++studioDraftDocuments.load = async (...args) => {
++  const requestedLoad = ++studioDocumentLoadVersion;
++  const requestedMutation = ++studioDocumentMutationVersion;
++  const hadPendingMutation = studioDocumentMutationsPending > 0;
++  await p(...args);
++  const loadIsCurrent = () => requestedLoad === studioDocumentLoadVersion && requestedMutation === studioDocumentMutationVersion && studioDocumentMutationsPending === 0 && !hadPendingMutation;
++  if (!loadIsCurrent() || t.api.getRepositoryInfo?.().provider !== "github") return;
++  let reconciled = false;
++  await Promise.all(a.value.map(async draft => {
++    const modified = draft.modified;
++    const draftIsCurrent = () => loadIsCurrent() && a.value.find(item => item.fsPath === draft.fsPath) === draft && draft.status === cP.Updated && draft.modified === modified && !draft.conflict;
++    if (!draft.original || !modified || !draftIsCurrent()) return;
++    try {
++      const source = await b(modified);
++      if (typeof source !== "string" || !draftIsCurrent()) return;
++      // Detach the baseline without changing the live editor object. If JSON transport
++      // would change dates or other metadata, leave this draft pending instead.
++      const original = JSON.parse(JSON.stringify(modified));
++      if (!studioDocumentSnapshotMatches(modified, original)) return;
++      if (await b(original) !== source || !await e.document.utils.areEqual(modified, original) || !draftIsCurrent()) return;
++      const remote = await t.api.fetchFile(lF("content", draft.fsPath), { cached: false, timeout: 5000 });
++      if (!remote || remote.provider !== "github" || remote.encoding !== "base64" || typeof remote.content !== "string" || !draftIsCurrent()) return;
++      const remoteBytes = atob(remote.content);
++      const sourceBytes = new TextEncoder().encode(source);
++      if (sourceBytes.length !== remoteBytes.length || sourceBytes.some((byte, index) => byte !== remoteBytes.charCodeAt(index))) return;
++      if (await b(modified) !== source || !draftIsCurrent()) return;
++      const rebased = { ...draft, original, remoteFile: remote, status: cP.Pristine, formattingApplied: false };
++      // Unstorage snapshots JSON synchronously; later native edits enqueue their own
++      // write after this one. A failed write leaves the live pending draft intact.
++      await Tz.setItem(draft.fsPath, rebased);
++      if (!draftIsCurrent()) return;
++      draft.original = original;
++      draft.remoteFile = remote;
++      draft.status = cP.Pristine;
++      draft.formattingApplied = false;
++      reconciled = true;
++    } catch {
++      // An unavailable remote, unsupported value or serialization failure preserves work.
++    }
++  }));
++  if (reconciled && loadIsCurrent()) await g.callHook("studio:draft:document:updated", { caller: "useDraftDocuments.reconcile" });
++};
++return studioDraftDocuments;
++`;
++
++/** Exact replacements in the pinned Studio distribution, checked before any transformation. */
++export const reconciliationReplacements = [
++  { before: documentDraftStart, after: documentDraftStart.replace(';return{', ';const studioDraftDocuments={') },
++  { before: documentDraftEnd, after: `load:p,selectByFsPath:d,unselect:u,getStatus:m};${documentDraftReconciliation}});function ZU(` },
++  { before: githubFetchOptions, after: githubFetchOptions.replace('cached:t=!1}', 'cached:t=!1,timeout:studioFetchTimeout}') },
++  { before: githubFileRequest, after: githubFileRequest.replace('m(`/contents/${e}?ref=${o}`)', 'm(`/contents/${e}?ref=${o}`,{cache:t?"default":"no-store",timeout:studioFetchTimeout,retry:studioFetchTimeout===undefined?undefined:0})') },
++];
+diff --git a/dist/module/runtime/utils/studio-app-selection.mjs b/dist/module/runtime/utils/studio-app-selection.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..db9ebdb69e6ab8c3f1e0ab0882280831e3f633fb
+--- /dev/null
++++ b/dist/module/runtime/utils/studio-app-selection.mjs
+@@ -0,0 +1,40 @@
++/** Prevent stale asynchronous document selections from replacing or navigating newer selections. */
++
++const draftBaseStart = 'function Pz(e,t,n,a){const o=Vt(!1)';
++const draftBaseSelection = 'selectByFsPath:async function(e){o.value=!0;try{const t=r.value?.find(t=>t.fsPath===e);if(t)return void(i.value=t);const n=await l.get(e);if(!n)throw new Error(`Cannot select item: no corresponding database entry found for fsPath ${e}`);const a=await v(e,n,n);i.value=a}finally{o.value=!1}}';
++const draftBaseUnselect = 'unselect:async function(){i.value=null},load:async function(){';
++const treeSelectionStart = 'lY=(e,t,n)=>{const a=uz()';
++const treeSelectionNavigation = 'async function p(a,{navigate:i=!0}={}){if(d.value=a||c.value,r(e,d.value.fsPath),"file"===a?.type){if(await n.selectByFsPath(a.fsPath),!i||';
++const guardedDraftBaseSelection = String.raw`selectByFsPath:async function(e) {
++  const requestedVersion = ++studioDraftSelectionVersion;
++  o.value = true;
++  let pending = studioDraftSelections.get(e);
++  if (!pending) {
++    pending = (async () => {
++      const existing = r.value.find(item => item.fsPath === e);
++      if (existing) return existing;
++      const document = await l.get(e);
++      if (!document) throw new Error("Cannot select item: no corresponding database entry found for fsPath " + e);
++      // A separate explicit creation can finish while the database lookup is pending.
++      const created = r.value.find(item => item.fsPath === e);
++      return created || await v(e, document, document);
++    })();
++    studioDraftSelections.set(e, pending);
++  }
++  try {
++    const selected = await pending;
++    if (requestedVersion === studioDraftSelectionVersion) i.value = selected;
++  } finally {
++    if (studioDraftSelections.get(e) === pending) studioDraftSelections.delete(e);
++    if (requestedVersion === studioDraftSelectionVersion) o.value = false;
++  }
++}`;
++
++/** Exact replacements in the pinned Studio distribution, checked before any transformation. */
++export const selectionReplacements = [
++  { before: draftBaseStart, after: 'function Pz(e,t,n,a){const studioDraftSelections=new Map;let studioDraftSelectionVersion=0;const o=Vt(!1)' },
++  { before: draftBaseSelection, after: guardedDraftBaseSelection },
++  { before: draftBaseUnselect, after: 'unselect:async function(){studioDraftSelectionVersion++;o.value=!1;i.value=null},load:async function(){' },
++  { before: treeSelectionStart, after: 'lY=(e,t,n)=>{let studioTreeSelectionVersion=0;const a=uz()' },
++  { before: treeSelectionNavigation, after: treeSelectionNavigation.replace('{if(', '{const requestedVersion=++studioTreeSelectionVersion;if(').replace(',!i||', ',requestedVersion!==studioTreeSelectionVersion||!i||') },
++];
+diff --git a/dist/module/runtime/utils/studio-app-storage.mjs b/dist/module/runtime/utils/studio-app-storage.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..4a25877f4f4f94efeb252c6db91415d899be8f22
+--- /dev/null
++++ b/dist/module/runtime/utils/studio-app-storage.mjs
+@@ -0,0 +1,130 @@
++/** Repair local draft schemas and order draft loading after preview-worker replacement. */
++
++const indexedDatabaseStore = 'function jz(e,t){let n;return(a,o)=>(()=>{if(n)return n;const a=indexedDB.open(e);return a.onupgradeneeded=()=>a.result.createObjectStore(t),n=Cz(a),n.then(e=>{e.onclose=()=>n=void 0},()=>{n=void 0}),n})().then(e=>o(e.transaction(t,a).objectStore(t)))}';
++const workerRegistration = 't.app.registerServiceWorker(),n.value&&function(){';
++const repairedIndexedDatabaseStore = String.raw`function jz(databaseName, storeName) {
++  let cachedDatabase;
++
++  /** Opens one connection, creates only the missing store, and bounds every queued request. */
++  function openDatabase(version) {
++    return new Promise((resolve, reject) => {
++      let settled = false;
++      let openTimeout;
++      let wasBlocked = false;
++      let request;
++      try {
++        request = version === undefined ? indexedDB.open(databaseName) : indexedDB.open(databaseName, version);
++      } catch (error) {
++        fail(error);
++        return;
++      }
++
++      function fail(error) {
++        if (settled) return;
++        settled = true;
++        if (openTimeout !== undefined) clearTimeout(openTimeout);
++        reject(error);
++      }
++
++      // An open queued behind another tab's abandoned upgrade does not receive
++      // its own blocked event. Bound it from creation rather than from that event.
++      openTimeout = setTimeout(() => {
++        const error = new Error(wasBlocked
++          ? "Studio cannot prepare its local draft storage while another tab keeps it open. Close other tabs for this site and reload Studio."
++          : "Studio could not open its local draft storage within five seconds. Close other tabs for this site and reload Studio.");
++        error.name = wasBlocked ? "StudioDraftStorageBlockedError" : "StudioDraftStorageTimeoutError";
++        fail(error);
++      }, 5000);
++
++      request.onupgradeneeded = () => {
++        // A timed-out request cannot be cancelled directly. Abort a later upgrade
++        // instead of leaving a connection or deferred schema mutation behind.
++        if (settled) {
++          request.transaction.abort();
++          return;
++        }
++        if (!request.result.objectStoreNames.contains(storeName)) request.result.createObjectStore(storeName);
++      };
++      request.onblocked = () => {
++        if (!settled) wasBlocked = true;
++      };
++      request.onerror = () => fail(request.error || new Error("Studio could not open its local draft storage."));
++      request.onsuccess = () => {
++        const connection = request.result;
++        if (settled) {
++          connection.close();
++          return;
++        }
++        settled = true;
++        if (openTimeout !== undefined) clearTimeout(openTimeout);
++        resolve(connection);
++      };
++    });
++  }
++
++  /** Repairs only a missing store, preserving other stores and draft values. */
++  async function initializeDatabase() {
++    for (let attempt = 0; attempt < 3; attempt++) {
++      const connection = await openDatabase();
++      if (connection.objectStoreNames.contains(storeName)) return connection;
++      const nextVersion = connection.version + 1;
++      connection.close();
++      try {
++        const upgraded = await openDatabase(nextVersion);
++        if (upgraded.objectStoreNames.contains(storeName)) return upgraded;
++        upgraded.close();
++      } catch (error) {
++        // Another tab can upgrade after inspection. Reopen its latest schema
++        // before deciding whether a further additive upgrade is necessary.
++        if (error?.name !== "VersionError") throw error;
++      }
++    }
++    throw new Error("Studio could not prepare its local draft storage after concurrent updates. Close other tabs for this site and reload Studio.");
++  }
++
++  /** Shares a valid connection and releases it when another tab needs a schema upgrade. */
++  function getDatabase() {
++    if (!cachedDatabase) {
++      const pending = initializeDatabase();
++      cachedDatabase = pending;
++      pending.then(connection => {
++        const invalidate = () => {
++          if (cachedDatabase === pending) cachedDatabase = undefined;
++        };
++        connection.onclose = invalidate;
++        connection.onversionchange = () => {
++          invalidate();
++          connection.close();
++        };
++      }, () => {
++        if (cachedDatabase === pending) cachedDatabase = undefined;
++      });
++    }
++    return cachedDatabase;
++  }
++
++  return async (mode, callback) => {
++    for (let attempt = 0; attempt < 2; attempt++) {
++      const pending = getDatabase();
++      const connection = await pending;
++      let store;
++      try {
++        store = connection.transaction(storeName, mode).objectStore(storeName);
++      } catch (error) {
++        // Retry only transaction creation. A callback may already have written
++        // data, so neither its synchronous failure nor its rejected promise is retried.
++        if (attempt > 0 || (error?.name !== "InvalidStateError" && error?.name !== "NotFoundError")) throw error;
++        if (cachedDatabase === pending) cachedDatabase = undefined;
++        connection.close();
++        continue;
++      }
++      return callback(store);
++    }
++  };
++}`;
++
++/** Exact replacements in the pinned Studio distribution, checked before any transformation. */
++export const storageReplacements = [
++  { before: indexedDatabaseStore, after: repairedIndexedDatabaseStore },
++  { before: workerRegistration, after: `await ${workerRegistration}` },
++];
+diff --git a/dist/module/runtime/utils/studio-app-tables.mjs b/dist/module/runtime/utils/studio-app-tables.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..2e271a83dfd243405d2e3c3a9011b74dae4b061f
+--- /dev/null
++++ b/dist/module/runtime/utils/studio-app-tables.mjs
+@@ -0,0 +1,52 @@
++/** Preserve source cell properties through the visual editor without rendering the preservation bag. */
++
++const tableCellToEditor = 'function EEe(e,t){const n=O_e(e).flatMap(e=>_Ee(e));return 0===n.length?{type:t,content:[{type:"paragraph",content:[]}]}:n.every(e=>SEe.has(e.type))?{type:t,content:[{type:"paragraph",content:n}]}:{type:t,content:n}}';
++const tableCellFromEditor = 'function vEe(e,t){const n=uEe(e.content||[]);return 1===n.length&&Array.isArray(n[0])&&"p"===n[0][0]?[t,{},...n[0].slice(2)]:[t,{},...n]}';
++const tableCellSchema = 'align:bMe()}),tableRole:';
++const tableCellPreservationHelpers = String.raw`/**
++ * Read the alignment representations used by MDC and Comark without discarding other cell properties.
++ * @param {Record<string, unknown>} properties
++ * @returns {"left" | "center" | "right" | null}
++ */
++function studioTableCellAlignment(properties) {
++  const direct = properties.align;
++  if (direct === "left" || direct === "center" || direct === "right") return direct;
++  const styled = typeof properties.style === "string" ? properties.style.match(/(?:^|;)\s*text-align\s*:\s*(left|center|right)(?:\s*!important)?\s*(?:;|$)/i)?.[1]?.toLowerCase() : undefined;
++  return styled === "left" || styled === "center" || styled === "right" ? styled : null;
++}
++
++/**
++ * Restore authored properties after TipTap's schema roundtrip, applying actual cell attribute edits only.
++ * The raw bag is non-rendered in Studio; it cannot inject extra HTML attributes into the editor.
++ * @param {Record<string, unknown>} attributes
++ * @returns {Record<string, unknown>}
++ */
++function studioTableCellProperties(attributes) {
++  const original = attributes.props && typeof attributes.props === "object" && !Array.isArray(attributes.props) ? attributes.props : {};
++  const properties = { ...original };
++  for (const [key, defaultValue] of [["colspan", 1], ["rowspan", 1], ["colwidth", null]]) {
++    if (attributes[key] !== undefined && (Object.hasOwn(properties, key) || attributes[key] !== defaultValue)) properties[key] = attributes[key];
++  }
++  const alignment = studioTableCellAlignment({ align: attributes.align });
++  if (alignment === studioTableCellAlignment(original)) return properties;
++  const hasStyledAlignment = typeof properties.style === "string" && /(?:^|;)\s*text-align\s*:/i.test(properties.style);
++  if (Object.hasOwn(properties, "align") || !hasStyledAlignment) {
++    if (alignment) properties.align = alignment;
++    else delete properties.align;
++  }
++  if (hasStyledAlignment) {
++    const style = alignment
++      ? properties.style.replace(/((?:^|;)\s*text-align\s*:\s*)([^;]*)/gi, (_match, prefix, previous) => prefix + alignment + (/!important\s*$/i.test(previous) ? " !important" : ""))
++      : properties.style.replace(/(^|;)\s*text-align\s*:[^;]*(?=;|$)/gi, "$1");
++    if (style.replace(/[;\s]/g, "")) properties.style = style;
++    else delete properties.style;
++  }
++  return properties;
++}`;
++
++/** Exact replacements in the pinned Studio distribution, checked before any transformation. */
++export const tableReplacements = [
++  { before: tableCellToEditor, after: `${tableCellPreservationHelpers}\nfunction EEe(e,t){const n=O_e(e).flatMap(e=>_Ee(e)),a=T_e(e)||{},o={...a,props:a,align:studioTableCellAlignment(a)};return 0===n.length?{type:t,attrs:o,content:[{type:"paragraph",content:[]}]}:n.every(e=>SEe.has(e.type))?{type:t,attrs:o,content:[{type:"paragraph",content:n}]}:{type:t,attrs:o,content:n}}` },
++  { before: tableCellFromEditor, after: 'function vEe(e,t){const n=uEe(e.content||[]),a=studioTableCellProperties(e.attrs||{});return 1===n.length&&Array.isArray(n[0])&&"p"===n[0][0]?[t,a,...n[0].slice(2)]:[t,a,...n]}' },
++  { before: tableCellSchema, after: 'align:bMe(),props:{default:null,rendered:!1}}),tableRole:', occurrences: 2 },
++];
+diff --git a/dist/module/runtime/utils/studio-app.mjs b/dist/module/runtime/utils/studio-app.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..44d91ae281660eea1a068046187ca99e8bb1ad60
+--- /dev/null
++++ b/dist/module/runtime/utils/studio-app.mjs
+@@ -0,0 +1,95 @@
++import { createHash } from "node:crypto";
++import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
++import { resolve } from "node:path";
++import { editingReplacements } from "./studio-app-editing.mjs";
++import { reconciliationReplacements } from "./studio-app-reconciliation.mjs";
++import { selectionReplacements } from "./studio-app-selection.mjs";
++import { storageReplacements } from "./studio-app-storage.mjs";
++import { tableReplacements } from "./studio-app-tables.mjs";
++
++const supportedVersion = "1.8.0";
++const replacements = [
++  ...storageReplacements,
++  ...editingReplacements,
++  ...tableReplacements,
++  ...selectionReplacements,
++  ...reconciliationReplacements,
++];
++
++/**
++ * Apply the reviewed compatibility fixes only when every pinned source boundary still matches.
++ * @param {string} source
++ * @param {string} version
++ * @returns {string}
++ */
++export function patchStudioAppBundle(source, version) {
++  if (version !== supportedVersion) {
++    throw new Error("Nuxt Studio embedded app compatibility patch requires version " + supportedVersion + ".");
++  }
++  for (const { before, occurrences = 1 } of replacements) {
++    if (source.split(before).length !== occurrences + 1) {
++      throw new Error("Nuxt Studio embedded app compatibility patch no longer matches: " + before.slice(0, 80));
++    }
++  }
++  for (const { before, after, occurrences = 1 } of replacements) {
++    source = occurrences === 1 ? source.replace(before, after) : source.replaceAll(before, after);
++  }
++  return source;
++}
++
++/**
++ * Copy the packaged app and expose patched bytes at a new immutable URL on every content change.
++ * Original package assets remain untouched; relative shared chunks, styles, and workers stay together.
++ * @param {{ version: string, appDirectory: string, buildDirectory: string }} options
++ * @returns {Promise<{ directory: string, baseURL: string }>}
++ */
++export async function prepareStudioAppAssets({ version, appDirectory, buildDirectory }) {
++  const source = await readFile(resolve(appDirectory, "main.js"), "utf8");
++  const patchedSource = patchStudioAppBundle(source, version);
++  const fingerprint = createHash("sha256");
++  /** @param {string} relativeDirectory */
++  async function collectFiles(relativeDirectory = "") {
++    const entries = await readdir(resolve(appDirectory, relativeDirectory), { withFileTypes: true });
++    const paths = [];
++    for (const entry of entries) {
++      const relativePath = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
++      if (entry.isDirectory()) {
++        paths.push(...await collectFiles(relativePath));
++      } else if (entry.isFile()) {
++        paths.push(relativePath);
++      } else {
++        throw new Error("Nuxt Studio app assets must contain regular files and directories only.");
++      }
++    }
++    return paths;
++  }
++  for (const relativePath of (await collectFiles()).sort()) {
++    const bytes = relativePath === "main.js" ? Buffer.from(patchedSource) : await readFile(resolve(appDirectory, relativePath));
++    fingerprint.update(relativePath).update("\0").update(bytes).update("\0");
++  }
++  const digest = fingerprint.digest("hex").slice(0, 16);
++  const assetVersion = `${version}-${digest}`;
++  const directory = resolve(buildDirectory, "studio-app", assetVersion);
++  await mkdir(directory, { recursive: true });
++  await cp(appDirectory, directory, { recursive: true, force: true });
++  await writeFile(resolve(directory, "main.js"), patchedSource);
++  return { directory, baseURL: `/_studio-app/${assetVersion}` };
++}
++
++/**
++ * Restore generated assets after Nuxt CLI clears buildDir following module initialization.
++ * Keep the previously published import URL stable throughout the build.
++ * @param {{ hook: (name: "build:before", callback: () => Promise<void>) => unknown }} nuxt
++ * @param {{ version: string, appDirectory: string, buildDirectory: string }} options
++ * @returns {Promise<{ directory: string, baseURL: string }>}
++ */
++export async function registerStudioAppAssets(nuxt, options) {
++  const assets = await prepareStudioAppAssets(options);
++  nuxt.hook("build:before", async () => {
++    const restored = await prepareStudioAppAssets(options);
++    if (restored.baseURL !== assets.baseURL || restored.directory !== assets.directory) {
++      throw new Error("Nuxt Studio embedded app changed during the build; restart with consistent dependencies.");
++    }
++  });
++  return assets;
++}

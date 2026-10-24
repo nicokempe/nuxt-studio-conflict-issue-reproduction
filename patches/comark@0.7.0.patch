@@ -1,0 +1,139 @@
+diff --git a/dist/internal/parse/syntax/block-params.d.ts b/dist/internal/parse/syntax/block-params.d.ts
+--- a/dist/internal/parse/syntax/block-params.d.ts
++++ b/dist/internal/parse/syntax/block-params.d.ts
+@@ -1,7 +1,8 @@
+ /**
+  * Parse `component-name [content] {.params}` from the trailing portion of a block fence line.
++ * @param preserveNameCase Preserve case-sensitive slot names instead of normalizing component names.
+  */
+-export declare function parseBlockParams(str: string): {
++export declare function parseBlockParams(str: string, preserveNameCase?: boolean): {
+     name: string;
+     content?: string;
+     props?: [string, string][];
+diff --git a/dist/internal/parse/syntax/block-params.js b/dist/internal/parse/syntax/block-params.js
+--- a/dist/internal/parse/syntax/block-params.js
++++ b/dist/internal/parse/syntax/block-params.js
+@@ -2,7 +2,7 @@ import { kebabCase } from "../../../utils/index.js";
+ import { parseBracketContent } from "./brackets.js";
+ import { searchProps } from "./props.js";
+ const RE_BLOCK_NAME = /^[a-z$][$\w.-]*/i;
+-export function parseBlockParams(str) {
++export function parseBlockParams(str, preserveNameCase = false) {
+     str = str.trim();
+     if (!str)
+         return { name: '' };
+@@ -33,7 +33,7 @@ export function parseBlockParams(str) {
+         unparsedRemaining = remaining;
+     }
+     const result = {
+-        name: kebabCase(name),
++        name: preserveNameCase ? name : kebabCase(name),
+     };
+     if (content !== undefined)
+         result.content = content;
+diff --git a/dist/internal/stringify/attributes.js b/dist/internal/stringify/attributes.js
+--- a/dist/internal/stringify/attributes.js
++++ b/dist/internal/stringify/attributes.js
+@@ -116,11 +116,8 @@ export function comarkAttributes(attributes) {
+         }
+         if (key === 'class') {
+             const classValue = Array.isArray(value) ? value.join(' ') : String(value);
+-            return classValue
+-                .split(' ')
+-                .filter(Boolean)
+-                .map((c) => `.${c}`)
+-                .join('');
++            // A period inside an arbitrary utility class is data, not a shorthand separator.
++            return `class="${classValue.replace(/"/g, '\\"')}"`;
+         }
+         if (typeof value === 'object') {
+             return `${key}="${JSON.stringify(value).replace(/"/g, '\\"')}"`;
+@@ -167,13 +164,6 @@ export function htmlAttributes(attributes) {
+     }
+     return parts.join(' ');
+ }
+-function normalizeValue(value) {
+-    if (value === 'true')
+-        return true;
+-    if (value === 'false')
+-        return false;
+-    return value;
+-}
+ export function comarkYamlAttributes(attributes, style = 'codeblock') {
+     const normalized = Object.fromEntries(Object.entries(attributes).map(([key, value]) => {
+         if (key.startsWith(':')) {
+@@ -187,7 +177,7 @@ export function comarkYamlAttributes(attributes, style = 'codeblock') {
+             }
+             return [key.slice(1), value];
+         }
+-        return [key, normalizeValue(value)];
++        return [key, value];
+     }));
+     const yamlContent = stringifyYaml(normalized).trim();
+     if (style === 'frontmatter') {
+diff --git a/dist/internal/stringify/handlers/br.js b/dist/internal/stringify/handlers/br.js
+--- a/dist/internal/stringify/handlers/br.js
++++ b/dist/internal/stringify/handlers/br.js
+@@ -1,3 +1,4 @@
+ export function br(_, _state) {
+-    return '  \n';
++    // A visible Markdown hard break survives editors that trim trailing spaces.
++    return '\\\n';
+ }
+diff --git a/dist/internal/stringify/handlers/mdc.js b/dist/internal/stringify/handlers/mdc.js
+--- a/dist/internal/stringify/handlers/mdc.js
++++ b/dist/internal/stringify/handlers/mdc.js
+@@ -37,7 +37,7 @@ export async function mdc(node, state, parent) {
+     let result = `:${tag}${content && `[${content}]`}${attrs}` + (!parent ? state.context.blockSeparator : '');
+     if (!inline) {
+         const maxInlineAttributes = state.context.maxInlineAttributes ?? 3;
+-        const useYaml = hasObjectAttributes || maxInlineAttributes === 0 || attributeEntries.length > maxInlineAttributes;
++        const useYaml = attributeEntries.length > 0 && (hasObjectAttributes || maxInlineAttributes === 0 || attributeEntries.length > maxInlineAttributes);
+         if (useYaml) {
+             const yamlAttrs = comarkYamlAttributes(attributes, state.context.blockAttributesStyle);
+             result = `${fence}${tag}\n${yamlAttrs}${content ? `\n${content}` : ''}\n${fence}` + state.context.blockSeparator;
+diff --git a/dist/internal/stringify/handlers/p.js b/dist/internal/stringify/handlers/p.js
+--- a/dist/internal/stringify/handlers/p.js
++++ b/dist/internal/stringify/handlers/p.js
+@@ -2,8 +2,14 @@ import { comarkAttributes } from "../attributes.js";
+ export async function p(node, state, parent) {
+     const children = node.slice(2);
+     let result = '';
++    let followsHardBreak = false;
+     for (const child of children) {
+-        result += await state.one(child, state, node, result === '' || result.endsWith('\n'));
++        const isHardBreak = Array.isArray(child) && child[0] === 'br';
++        if (isHardBreak) result = result.replace(/[ \t]+$/, '');
++        // Inline :br already supplies its newline; do not turn the following softbreak into a paragraph.
++        const normalizedChild = followsHardBreak && typeof child === 'string' && child.startsWith('\n') ? child.slice(1) : child;
++        result += await state.one(normalizedChild, state, node, result === '' || result.endsWith('\n'));
++        followsHardBreak = isHardBreak;
+     }
+     const attrs = comarkAttributes(node[1]);
+     if (attrs)
+diff --git a/dist/internal/stringify/handlers/table.js b/dist/internal/stringify/handlers/table.js
+--- a/dist/internal/stringify/handlers/table.js
++++ b/dist/internal/stringify/handlers/table.js
+@@ -1,5 +1,8 @@
+ import { comarkAttributes, userBlockAttrs } from "../attributes.js";
+ function getAlignment(attributes) {
++    if (['left', 'center', 'right'].includes(attributes.align)) {
++        return attributes.align;
++    }
+     const style = attributes.style;
+     if (typeof style !== 'string') {
+         return null;
+diff --git a/dist/plugins/components.js b/dist/plugins/components.js
+--- a/dist/plugins/components.js
++++ b/dist/plugins/components.js
+@@ -249,7 +249,8 @@ const markdownItComarkBlock = (md) => {
+         if (!(state.src[start] === '#' && state.src[start + 1] !== ' ' && state.src[start + 1] !== '#'))
+             return false;
+         const line = state.src.slice(start, state.eMarks[startLine]);
+-        const { name, props } = parseBlockParams(line.slice(1));
++        // Vue slot names are case-sensitive; component-name normalization does not apply here.
++        const { name, props } = parseBlockParams(line.slice(1), true);
+         let lineEnd = startLine + 1;
+         let inCodeFence = false;
+         let codeFenceChar = '';

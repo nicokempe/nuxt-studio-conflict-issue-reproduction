@@ -7,15 +7,15 @@ This page uses component data and case-sensitive named slots. Its wording is del
 
 ::example-panel
 ---
-enabled: true
-disabled: false
 count: 3
-textNumber: '3'
+disabled: false
+enabled: true
 items:
   - label: First
     value: first
 settings:
   nested: true
+textNumber: '3'
 ---
 An example panel with structured properties.
 

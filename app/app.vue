@@ -2,11 +2,22 @@
 import { resolveFixtureLocale } from '~/utils/validators';
 
 const route = useRoute();
+const nuxtApp = useNuxtApp();
 const locale = computed(() => resolveFixtureLocale(route.params.locale));
 
 /** Repeats the background refresh that production Studio requests while editing. */
 async function refreshPreview(): Promise<void> {
   await refreshNuxtData();
+}
+
+/** Tracks an actual outgoing leave, rather than every asynchronous render cycle. */
+function beforePageLeave(): void {
+  if (import.meta.client) nuxtApp.$fixturePageLifecycle.leave();
+}
+
+/** Releases a cancelled outgoing transition as well as a completed one. */
+async function cancelledPageLeave(): Promise<void> {
+  if (import.meta.client) await nuxtApp.$fixturePageLifecycle.afterLeave();
 }
 </script>
 
@@ -24,7 +35,14 @@ async function refreshPreview(): Promise<void> {
       <button type="button" @click="refreshPreview">Refresh content</button>
     </header>
     <main>
-      <NuxtPage :page-key="pageRoute => pageRoute.path" />
+      <NuxtPage
+        :page-key="pageRoute => pageRoute.path"
+        :transition="{ name: 'fade', mode: 'out-in', onBeforeLeave: beforePageLeave, onLeaveCancelled: cancelledPageLeave }"
+      >
+        <template #default="{ Component }">
+          <div><component :is="Component" /></div>
+        </template>
+      </NuxtPage>
     </main>
     <footer>
       <p>Anonymous Studio reproduction. Every name and content entry is synthetic.</p>

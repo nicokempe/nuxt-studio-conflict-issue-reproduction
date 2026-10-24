@@ -7,15 +7,15 @@ Diese Seite verwendet Komponentendaten und benannte Slots mit Großbuchstaben. A
 
 ::example-panel
 ---
-enabled: true
-disabled: false
 count: 3
-textNumber: '3'
+disabled: false
+enabled: true
 items:
   - label: Erstes
     value: first
 settings:
   nested: true
+textNumber: '3'
 ---
 Ein Beispiel mit strukturierten Eigenschaften.
 

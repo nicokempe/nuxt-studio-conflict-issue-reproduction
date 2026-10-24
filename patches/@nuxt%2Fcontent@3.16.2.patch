@@ -1,0 +1,70 @@
+diff --git a/dist/module.cjs b/dist/module.cjs
+--- a/dist/module.cjs
++++ b/dist/module.cjs
+@@ -1262,7 +1262,8 @@ const markdown = defineTransformer({
+     if (options.compress) {
+       return {
+         ...parsed.data,
+-        excerpt: parsed.excerpt ? hast.fromHast(parsed.excerpt) : void 0,
++        // An explicit editorial summary belongs to the document; generated excerpts remain the fallback.
++        excerpt: typeof parsed.data.excerpt === "string" ? parsed.data.excerpt : parsed.excerpt ? hast.fromHast(parsed.excerpt) : void 0,
+         body: {
+           ...hast.fromHast(parsed.body),
+           toc: parsed.toc
+@@ -1273,7 +1274,7 @@ const markdown = defineTransformer({
+     }
+     return {
+       ...parsed.data,
+-      excerpt: parsed.excerpt,
++      excerpt: typeof parsed.data.excerpt === "string" ? parsed.data.excerpt : parsed.excerpt,
+       body: {
+         ...parsed.body,
+         toc: parsed.toc
+@@ -3343,6 +3344,12 @@ const module$1 = kit.defineNuxtModule({
+       };
+     });
+     if (nuxt.options._prepare) {
++      if (kit.hasNuxtModule("nuxt-studio")) {
++        // Formatting checks also need fresh collection metadata before the first dev/build run.
++        nuxt.hook("schema:resolved", (schema) => {
++          kit.addTemplate(previewTemplate(manifest.collections, {}, schema));
++        });
++      }
+       return;
+     }
+     nuxt.hook("modules:done", async () => {
+diff --git a/dist/module.mjs b/dist/module.mjs
+--- a/dist/module.mjs
++++ b/dist/module.mjs
+@@ -1243,7 +1243,8 @@ const markdown = defineTransformer({
+     if (options.compress) {
+       return {
+         ...parsed.data,
+-        excerpt: parsed.excerpt ? fromHast(parsed.excerpt) : void 0,
++        // An explicit editorial summary belongs to the document; generated excerpts remain the fallback.
++        excerpt: typeof parsed.data.excerpt === "string" ? parsed.data.excerpt : parsed.excerpt ? fromHast(parsed.excerpt) : void 0,
+         body: {
+           ...fromHast(parsed.body),
+           toc: parsed.toc
+@@ -1254,7 +1255,7 @@ const markdown = defineTransformer({
+     }
+     return {
+       ...parsed.data,
+-      excerpt: parsed.excerpt,
++      excerpt: typeof parsed.data.excerpt === "string" ? parsed.data.excerpt : parsed.excerpt,
+       body: {
+         ...parsed.body,
+         toc: parsed.toc
+@@ -3324,6 +3325,12 @@ const module$1 = defineNuxtModule({
+       };
+     });
+     if (nuxt.options._prepare) {
++      if (hasNuxtModule("nuxt-studio")) {
++        // Formatting checks also need fresh collection metadata before the first dev/build run.
++        nuxt.hook("schema:resolved", (schema) => {
++          addTemplate(previewTemplate(manifest.collections, {}, schema));
++        });
++      }
+       return;
+     }
+     nuxt.hook("modules:done", async () => {
