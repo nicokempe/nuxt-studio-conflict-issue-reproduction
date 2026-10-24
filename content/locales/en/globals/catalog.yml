@@ -1,0 +1,15 @@
+items:
+  - slug: example-product
+    kind: product
+    title: Example Product
+    description: A fictional product used to demonstrate editing a localized catalog entry.
+    features:
+      - Structured catalog data
+      - Shared detail layout
+  - slug: example-partner
+    kind: partner
+    title: Example Partner
+    description: A fictional partner stored in the same small catalog.
+    features:
+      - Language-specific description
+      - Existing page structure

@@ -1,0 +1,15 @@
+items:
+  - slug: example-product
+    kind: product
+    title: Beispielprodukt
+    description: Ein erfundenes Produkt zum Bearbeiten eines übersetzten Katalogeintrags.
+    features:
+      - Strukturierte Katalogdaten
+      - Gemeinsame Detailvorlage
+  - slug: example-partner
+    kind: partner
+    title: Beispielpartner
+    description: Ein erfundener Partner im selben kleinen Katalog.
+    features:
+      - Übersetzte Beschreibung
+      - Bestehende Seitenstruktur
