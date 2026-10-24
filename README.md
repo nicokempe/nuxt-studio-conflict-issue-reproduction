@@ -1,0 +1,1 @@
+# nuxt-studio-conflict-issue-reproduction
